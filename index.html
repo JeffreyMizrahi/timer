@@ -289,7 +289,7 @@ function readFields() {
 function commitFields() {
   const t=readFields(); totalSeconds=t; remaining=t;
   minField.value=pad(Math.floor(remaining/60)); secField.value=pad(remaining%60);
-  stateLabel.textContent='ready'; render();
+  stateLabel.textContent='ready'; render(); syncToUrl();
 }
 
 function start() {
@@ -328,6 +328,7 @@ function applyFont(fi) {
   sepSpan.style.fontFamily=f.family; sepSpan.style.fontSize=fontSize; sepSpan.style.fontWeight=f.weight;
   stateLabel.style.fontFamily=f.family;
   document.querySelectorAll('.font-option').forEach((el,i) => el.classList.toggle('active', i===fi));
+  if(typeof syncToUrl==='function') syncToUrl();
 }
 
 function applyTheme(i) {
@@ -361,6 +362,7 @@ function applyTheme(i) {
 
   applyFont(t.fontIdx);
   initParticles(t);
+  if(typeof syncToUrl==='function') syncToUrl();
 }
 
 function initParticles(t) {
@@ -428,37 +430,39 @@ addBtn.addEventListener('click', () => { if(isEditing())commitFields(); remainin
 
 function syncToUrl() {
   const m = Math.floor(totalSeconds/60), s = totalSeconds%60;
-  const hash = `t=${pad(m)}:${pad(s)}&theme=${currentTheme}&font=${currentFont}`;
-  history.replaceState(null, '', '#' + hash);
+  const params = `?t=${pad(m)}:${pad(s)}&theme=${currentTheme}&font=${currentFont}`;
+  history.replaceState(null, '', params);
 }
 
-function readUrl() {
-  const h = location.hash.slice(1);
-  if (!h) return;
+function parseUrl() {
+  let raw = location.search.slice(1);
+  if (!raw) raw = location.hash.slice(1);
+  if (!raw) return null;
   const params = {};
-  h.split('&').forEach(p => { const [k,v] = p.split('='); if(k&&v) params[k]=v; });
-  if (params.t) {
-    const parts = params.t.split(':');
-    if (parts.length===2) {
-      let m=parseInt(parts[0]), s=parseInt(parts[1]);
-      if(!isNaN(m)&&!isNaN(s)) { m=Math.max(0,Math.min(99,m)); s=Math.max(0,Math.min(59,s)); totalSeconds=m*60+s; remaining=totalSeconds; }
+  raw.split('&').forEach(p => { const [k,v] = p.split('='); if(k&&v) params[k]=decodeURIComponent(v); });
+  return params;
+}
+
+const urlParams = parseUrl();
+
+if (urlParams && urlParams.t) {
+  const parts = urlParams.t.split(':');
+  if (parts.length===2) {
+    let m=parseInt(parts[0]), s=parseInt(parts[1]);
+    if(!isNaN(m)&&!isNaN(s)) {
+      m=Math.max(0,Math.min(99,m)); s=Math.max(0,Math.min(59,s));
+      totalSeconds=m*60+s; remaining=totalSeconds;
     }
   }
-  const ti = parseInt(params.theme);
-  if (!isNaN(ti) && ti>=0 && ti<themes.length) applyTheme(ti); else applyTheme(0);
-  const fi = parseInt(params.font);
-  if (!isNaN(fi) && fi>=0 && fi<fonts.length) applyFont(fi);
 }
 
-const origCommit = commitFields;
-commitFields = function() { origCommit(); syncToUrl(); };
-const origApplyTheme = applyTheme;
-applyTheme = function(i) { origApplyTheme(i); syncToUrl(); };
-const origApplyFont = applyFont;
-applyFont = function(i) { origApplyFont(i); syncToUrl(); };
+const initTheme = (urlParams && !isNaN(parseInt(urlParams.theme))) ? Math.min(parseInt(urlParams.theme), themes.length-1) : 0;
+applyTheme(initTheme);
 
-readUrl();
-if (!location.hash) { applyTheme(0); }
+if (urlParams && !isNaN(parseInt(urlParams.font))) {
+  applyFont(Math.min(parseInt(urlParams.font), fonts.length-1));
+}
+
 drawBg();
 render();
 syncToUrl();
